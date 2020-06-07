@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # vue-automated-trading
 
 > A Vue.js based web server & client to visualise various automated trading algorithms.
