@@ -1,10 +1,13 @@
 <template>
   <div id="trade">
+    <div style="height: 5%; position: absolute; left: 50%; top: 0;">
+      <header class="time">
+        <p>{{ currentTime }}</p>
+      </header>
+    </div>
     <div class="chart">
-      <div style="height: 5%; position: absolute; left: 70%; top: 0;">
-        <header class="time">
-          <p>{{ currentTime }}</p>
-        </header>
+      <div style="height: 5%; position: absolute; left: 95%; top: 0; top: 5%;">
+        <vxe-switch v-model="order" on-label="Yes" off-label="No"></vxe-switch>
       </div>
       <div style="width: 70%; height: 50%; position: absolute; left: 0; top: 5%;">
         <ve-line :data="chartData" :settings="chartSettings"></ve-line>
@@ -23,7 +26,7 @@
       </div>
     </div>
     <div id="market">
-      <div style="width: 30%; height: 95%; position: absolute; left: 70%; top: 5%;">
+      <div style="width: 30%; height: 95%; position: absolute; left: 70%;">
         <ve-bar :data="marketData" height="100%" :settings="marketSettings"></ve-bar>
       </div>
     </div>
@@ -68,6 +71,7 @@ export default {
         rows: []
       },
       ws: null,
+      order: true,
       allAlign: null,
       currentTime: 'waiting to start...',
       status: this.$route.params.status,
@@ -84,6 +88,7 @@ export default {
       this.ws.send(this.status + ',' + this.id)
     }
     this.ws.onmessage = msg => {
+      if (this.order) { this.marketSettings.dataOrder = {label: 'buy', order: 'desc'} } else { this.marketSettings.dataOrder = {} }
       var msgData = JSON.parse(msg.data)
       this.currentTime = msgData.curr_time
       this.positionData.rows = msgData.position
