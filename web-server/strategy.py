@@ -26,10 +26,6 @@ class BasicStrategy:
         self.replay_buffer = None
         self.model = None
 
-        self.socket_msg = dict()
-        self.sh50 = None
-        self.init_state = None
-
     def process(self):
         if self.p_time is not None:
             if not self.p_time.date() == self.n_time.date():
@@ -39,14 +35,7 @@ class BasicStrategy:
         start_time = time.time()
         s_id = np.asarray([tick[0] for tick in self.crawler.tick])
         curr = np.asarray([tick[2:5] for tick in self.crawler.tick], dtype=float)
-        if self.init_state is None:
-            self.init_state = curr
-        self.socket_msg['market_info'] = [{
-            'stock_id': ID, 'buy': str((buy - init_buy) / init_buy), 'sell': str((sell - init_sell) / init_sell)
-        } for ID, buy, sell, init_buy, init_sell in
-            zip(s_id, curr[:, 0], curr[:, 1], self.init_state[:, 0], self.init_state[:, 1])]
-        if len(self.order[0]) > 0:
-            self.dealer.process_order(s_id, curr, self.order, self.n_time)
+        self.dealer.process_order(s_id, curr, self.order, self.n_time)
         self.order = self.get_order(s_id, curr)
         end_time = time.time()
         print('<<<<<<<<<< process_tick uses ' + str(end_time - start_time) + 's >>>>>>>>>>')
@@ -72,20 +61,22 @@ class BasicStrategy:
             time.sleep(0.5)
 
     async def send_socket(self):
-        sh50 = self.dealer.position['curr_price'].values.ravel()[0]
-        if self.sh50 is None:
-            self.sh50 = [sh50, sh50]
-        else:
-            self.sh50[1] = sh50
-        self.socket_msg['curr_time'] = str(self.n_time)
-        self.socket_msg['net_value'] = self.dealer.net_value
-        self.socket_msg['sh50'] = self.sh50[1] / self.sh50[0] * self.scale
+        s_id = np.asarray([tick[0] for tick in self.crawler.tick])
+        curr = np.asarray([tick[2:4] for tick in self.crawler.tick], dtype=float)
+        if self.round == 1:
+            self.init = curr
+        socket_msg = dict()
+        socket_msg['curr_time'] = str(self.n_time)
+        socket_msg['net_value'] = self.dealer.net_value
+        socket_msg['sh50'] = curr[0, 0] / self.baseline * self.scale
         position = (self.dealer.position['total'] * self.dealer.position['curr_price']).values.ravel()
         s_list = self.dealer.position.index.values.ravel()[position > 0]
         position = position[position > 0].astype(np.int).astype(np.str)
-        self.socket_msg['position'] = [{'Target': 'Cash', 'Volume': str(self.dealer.cash)}]
-        self.socket_msg['position'].extend([{'Target': i, 'Volume': j} for i, j in zip(s_list, position)])
-        await self.socket.send(json.dumps(self.socket_msg))
+        socket_msg['position'] = [{'Target': 'Cash', 'Volume': str(self.dealer.cash)}]
+        socket_msg['position'].extend([{'Target': i, 'Volume': j} for i, j in zip(s_list, position)])
+        curr = (curr - self.init) / self.init
+        socket_msg['market_info'] = [{'stock_id': ID, 'buy': CURR[0], 'sell': CURR[1]} for ID, CURR in zip(s_id, curr)]
+        await self.socket.send(json.dumps(socket_msg))
 
     def load_model(self):
         pass
@@ -99,7 +90,7 @@ class BasicStrategy:
     def get_order(self, s_id, curr):
         print('round: ', self.round)
         ids, amount = [], []
-        avail = self.dealer.position.loc[s_id, 'total'].values[1:].ravel()
+        avail = self.dealer.position.loc[s_id, 'volume'].values[1:].ravel()
         if self.round < self.length - 1:
             print('get_data')
             self.replay_buffer[self.round] = curr[1:].T
